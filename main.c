@@ -26,11 +26,8 @@ int main(int argc, char **argv) {
 	int background, i;
 	int pid;
 
-	
 	signal(SIGALRM, signal_handler);
 	signal(SIGINT, signal_handler);
-
-	
 
 	line = (char *)malloc(buffer_size * sizeof(char));
     if( line == NULL) {
@@ -103,18 +100,6 @@ int main(int argc, char **argv) {
 				strcat(path, "\0");
 				continue;
 			}
-
-			
-			
-			/*if((new_str = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
-			    new_str[0] = '\0';
-			    strcat(new_str,path);
-			    strcat(new_str,"/");
-			    strcat(new_str,args[0]);
-			} else {
-			   	perror("Malloc");
-			    exit(1);
-			}*/
 			
 			/* Fork to run the command */
 			switch (pid = fork()) {
@@ -151,9 +136,6 @@ int main(int argc, char **argv) {
 							   	perror("Malloc");
 							    exit(1);
 							}
-
-
-
 						}
 						printf("ERROR!\n");
 						exit(1);
@@ -174,28 +156,6 @@ int main(int argc, char **argv) {
 							free(new_str);
 							exit(1);
 					}
-					
-
-						
-						
-					/* child process */
-					/* 
-					if (access(path[0], X_OK)) {
-						execv(new_str, args);
-						perror("execv");
-						free(line);
-						free(new_str);
-						exit(1);
-					} else if (access(path[1], X_OK)) {
-						execv(new_str, args);
-						perror("execv");
-						free(line);
-						free(new_str);
-						exit(1);
-					} else {
-						error;
-					}
-					*/
 					
 				default:
 					/* parent (shell) */
