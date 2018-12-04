@@ -21,15 +21,16 @@ void signal_handler(int sig) {
 }
 
 int main(int argc, char **argv) {
-	char *cmd, *line, * args[MAXNUM];
+	char *cmd, *line = NULL, *args[MAXNUM], *paths[MAXNUM], *temp_path, *path = "/bin";
 	size_t buffer_size = MAXLEN;
 	int background, i;
 	int pid;
+
 	
 	signal(SIGALRM, signal_handler);
 	signal(SIGINT, signal_handler);
 
-	char path[MAXLEN] = "/bin/";
+	
 
 	line = (char *)malloc(buffer_size * sizeof(char));
     if( line == NULL) {
@@ -40,7 +41,7 @@ int main(int argc, char **argv) {
 	if (argc == 1) { /* Run in interactive mode if invoked with no arguments */
 		while (1) {
 			background = 0;
-			char * new_str;
+			char * new_str = NULL;
 
 						
 			/* Print the prompt */
@@ -75,16 +76,46 @@ int main(int argc, char **argv) {
 				cmd = NULL;
 			}
 			
-			if (strcmp(args[0],"exit")==0) {
+			if (strcmp(args[0],"exit")==0) { /* Built-in 'exit' command */
 				free(line);
 				free(new_str);
+				free(path);
 				exit(0);
 			}
 
+			if (strcmp(args[0], "path")==0) { /* Built-in 'path' command: Overwrites shell search path */
+				i = 1;
+				path = NULL;
+
+				while (args[i] != NULL) {
+					if (path == NULL) {
+						path = (char *)malloc((strlen(args[i])+2));
+						strcpy(path, args[i]);
+						strcat(path, " ");
+						i++;
+					} else {
+						path = (char *)realloc(path, (strlen(path)+strlen(args[i])+2));
+						strcat(path, args[i]);
+						strcat(path, " ");
+						i++;
+					}
+				}
+				strcat(path, "\0");
+				continue;
+			}
+
+			/*i = 0;
+			temp_path = path;
+			while ((paths[i] = strtok(cmd, " ")) != NULL) {
+				printf("Path%d: %s\n", i, paths[i]);
+				i++;
+				temp_path = NULL;
+			}*/
 			
-			if((new_str = malloc(strlen(path)+strlen(args[0])+1)) != NULL){
+			if((new_str = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
 			    new_str[0] = '\0';
 			    strcat(new_str,path);
+			    strcat(new_str,"/");
 			    strcat(new_str,args[0]);
 			} else {
 			   	perror("Malloc");
@@ -99,6 +130,23 @@ int main(int argc, char **argv) {
 					continue;
 				case 0:
 					/* child process */
+					/* 
+					if (access(path[0], X_OK)) {
+						execv(new_str, args);
+						perror("execv");
+						free(line);
+						free(new_str);
+						exit(1);
+					} else if (access(path[1], X_OK)) {
+						execv(new_str, args);
+						perror("execv");
+						free(line);
+						free(new_str);
+						exit(1);
+					} else {
+						error;
+					}
+					*/
 					execv(new_str, args);
 					perror("execv");
 					free(line);
