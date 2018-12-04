@@ -104,15 +104,9 @@ int main(int argc, char **argv) {
 				continue;
 			}
 
-			/*i = 0;
-			temp_path = path;
-			while ((paths[i] = strtok(cmd, " ")) != NULL) {
-				printf("Path%d: %s\n", i, paths[i]);
-				i++;
-				temp_path = NULL;
-			}*/
 			
-			if((new_str = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
+			
+			/*if((new_str = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
 			    new_str[0] = '\0';
 			    strcat(new_str,path);
 			    strcat(new_str,"/");
@@ -120,7 +114,7 @@ int main(int argc, char **argv) {
 			} else {
 			   	perror("Malloc");
 			    exit(1);
-			}
+			}*/
 			
 			/* Fork to run the command */
 			switch (pid = fork()) {
@@ -129,6 +123,61 @@ int main(int argc, char **argv) {
 					perror("fork");
 					continue;
 				case 0:
+					i = 0;
+					temp_path = path;
+					if (strcmp(path, "/bin")!=0){
+						while ((paths[i] = strtok(temp_path, " ")) != NULL) {
+							i++;
+							temp_path = NULL;
+						}
+						i = 0;
+						while (paths[i] != NULL) {
+							if((new_str = malloc(strlen(paths[i])+strlen(args[0])+2)) != NULL){
+							    new_str[0] = '\0';
+							    
+							    strcat(new_str, paths[i]);
+							    strcat(new_str, "/");
+							    strcat(new_str, args[0]);
+
+							    if (access(new_str, X_OK)==0) { /* Check if path can access file */
+									execv(new_str, args);
+									perror("execv");
+									free(line);
+									free(new_str);
+									exit(1);
+								}
+							    i++;
+							} else {
+							   	perror("Malloc");
+							    exit(1);
+							}
+
+
+
+						}
+						printf("ERROR!\n");
+						exit(1);
+
+					} else {
+						if((new_str = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
+						    new_str[0] = '\0';
+						    strcat(new_str,path);
+						    strcat(new_str,"/");
+						    strcat(new_str,args[0]);
+						} else {
+						   	perror("Malloc");
+						    exit(1);
+						}
+							execv(new_str, args);
+							perror("execv");
+							free(line);
+							free(new_str);
+							exit(1);
+					}
+					
+
+						
+						
 					/* child process */
 					/* 
 					if (access(path[0], X_OK)) {
@@ -147,11 +196,7 @@ int main(int argc, char **argv) {
 						error;
 					}
 					*/
-					execv(new_str, args);
-					perror("execv");
-					free(line);
-					free(new_str);
-					exit(1);
+					
 				default:
 					/* parent (shell) */
 					if (!background) {
