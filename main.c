@@ -20,7 +20,7 @@ void signal_handler(int sig) {
 	return;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
 	char *cmd, *line, * args[MAXNUM];
 	size_t buffer_size = MAXLEN;
 	int background, i;
@@ -29,7 +29,8 @@ int main(void) {
 	signal(SIGALRM, signal_handler);
 	signal(SIGINT, signal_handler);
 	
-	while (1) {
+	if (argc == 1) {
+		while (1) {
 		background = 0;
 		
 		/* print the prompt */
@@ -90,5 +91,13 @@ int main(void) {
 				break;
 		}
 	}
+		
+	} else if (argc == 2) {
+		printf("Batch mode\n");
+	} else {  /* Terminate program if shell invoked with more than 1 argument */
+		perror("Shell can only be invoked with no arguments or a single argument\n");
+		exit(1);
+	}
+	
 	return 0;
 }
