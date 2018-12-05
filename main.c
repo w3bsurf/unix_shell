@@ -22,8 +22,9 @@ void signal_handler(int sig) {
 
 int main(int argc, char **argv) {
 	char *cmd, *line = NULL, *args[MAXNUM], *paths[MAXNUM], *temp_path, *path = "/bin";
+	char error_message[30] = "An error has occurred\n";
 	size_t buffer_size = MAXLEN;
-	int background, i;
+	int background, i, num_of_args;
 	int pid;
 
 	signal(SIGALRM, signal_handler);
@@ -39,7 +40,6 @@ int main(int argc, char **argv) {
 		while (1) {
 			background = 0;
 			char * new_str = NULL;
-
 						
 			/* Print the prompt */
 			printf("wish> ");
@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
 				printf("arg %d: %s\n", i, args[i]);
 				i++;
 				cmd = NULL;
+				num_of_args = i;
 			}
 			
 			if (strcmp(args[0],"exit")==0) { /* Built-in 'exit' command */
@@ -78,6 +79,17 @@ int main(int argc, char **argv) {
 				free(new_str);
 				free(path);
 				exit(0);
+			}
+
+			if (strcmp(args[0],"cd")==0) { /* Built-in 'cd' command */
+				if (num_of_args == 2) {
+					if (chdir(args[1])==-1) {
+						write(STDERR_FILENO, error_message, strlen(error_message));
+					}
+				} else {
+					write(STDERR_FILENO, error_message, strlen(error_message));
+				}
+				continue;
 			}
 
 			if (strcmp(args[0], "path")==0) { /* Built-in 'path' command: Overwrites shell search path */
@@ -137,7 +149,7 @@ int main(int argc, char **argv) {
 							    exit(1);
 							}
 						}
-						printf("ERROR!\n");
+						write(STDERR_FILENO, error_message, strlen(error_message));
 						exit(1);
 
 					} else {
