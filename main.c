@@ -4,10 +4,12 @@
 #include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/file.h>
 
 #define LOGOUT 40
 #define MAXNUM 40
 #define MAXLEN 160
+#define DEFAULT_PATH "/bin"
 
 void signal_handler(int sig) {
 	switch (sig) {
@@ -21,11 +23,12 @@ void signal_handler(int sig) {
 }
 
 int main(int argc, char **argv) {
-	char *cmd, *line = NULL, *args[MAXNUM], *paths[MAXNUM], *temp_path, *path = "/bin";
+	char *cmd, *line = NULL, *temp_path, *path = DEFAULT_PATH;
+	char *output[MAXNUM], *paths[MAXNUM], *args[MAXNUM] , *args2[MAXNUM];
 	char error_message[30] = "An error has occurred\n";
 	size_t buffer_size = MAXLEN;
 	int background, i, num_of_args;
-	int pid;
+	int pid, fd, saved_stdout = dup(1);;
 
 	signal(SIGALRM, signal_handler);
 	signal(SIGINT, signal_handler);
@@ -39,7 +42,12 @@ int main(int argc, char **argv) {
 	if (argc == 1) { /* Run in interactive mode if invoked with no arguments */
 		while (1) {
 			background = 0;
-			char * new_str = NULL;
+			char * path_args = NULL;
+
+			/* Restore stdout */
+			// Source: https://stackoverflow.com/questions/11042218/c-restore-stdout-to-terminal
+			dup2(saved_stdout, 1);
+			close(saved_stdout);
 						
 			/* Print the prompt */
 			printf("wish> ");
@@ -64,25 +72,76 @@ int main(int argc, char **argv) {
 				background = 1;
 			}
 			
-			/* Split the command line */
 			i = 0;
 			cmd = line;
-			while ((args[i] = strtok(cmd, " ")) != NULL) {
-				printf("arg %d: %s\n", i, args[i]);
-				i++;
-				cmd = NULL;
-				num_of_args = i;
+
+			if (strpbrk(line, ">")!=0) { 	/*If ">" in input, redirect output to file */ 
+				/* Split input in two: cmd and output file */
+				while ((args2[i] = strsep(&cmd, ">")) != NULL) {
+					i++;
+				}
+				if (i>2) { 	/* If more than 1 ">" --> error */
+					write(STDERR_FILENO, error_message, strlen(error_message));
+					continue;
+				} else {
+					i = 0;
+					/* Check output side of ">" for num of files */
+					while ((output[i] = strtok(args2[1], " ")) != NULL) {
+						i++;
+						args2[1] = NULL;
+					}
+					if (i!=1) { /* If more or less than 1 output file --> error */
+						write(STDERR_FILENO, error_message, strlen(error_message));
+						continue;
+					} else {
+						i = 0;
+						/* Split the command line */
+						while ((args[i] = strtok(args2[0], " ")) != NULL) {
+							printf("arg %d: %s\n", i, args[i]);
+							i++;
+							args2[0] = NULL;
+							num_of_args = i;
+						}
+						/* Open output file */
+						fd = open(output[0], O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+			            if (fd == -1) {
+			                perror("Unable to open file");
+			                continue;
+			            }
+			            /* Save current stdout for use later */
+			            saved_stdout = dup(1);
+			            /* Direct stdout to file */
+			            dup2(fd, 1);
+			            close(fd);
+					}
+				}
+
+			} else {
+				/* Split the command line */
+				while ((args[i] = strtok(cmd, " ")) != NULL) {
+					printf("arg %d: %s\n", i, args[i]);
+					i++;
+					cmd = NULL;
+					num_of_args = i;
+				}
 			}
 			
-			if (strcmp(args[0],"exit")==0) { /* Built-in 'exit' command */
-				free(line);
-				free(new_str);
-				free(path);
-				exit(0);
+			/* Built-in 'exit' command */
+			if (strcmp(args[0], "exit")==0) { 
+				if (num_of_args > 1) {
+					write(STDERR_FILENO, error_message, strlen(error_message));
+					continue;
+				} else {
+					free(line);
+					free(path_args);
+					free(path);
+					exit(0);
+				}
 			}
 
-			if (strcmp(args[0],"cd")==0) { /* Built-in 'cd' command */
-				if (num_of_args == 2) {
+			/* Built-in 'cd' command */
+			if (strcmp(args[0], "cd")==0) { 
+				if (num_of_args == 2) { 	/* Check input for correct num of args */
 					if (chdir(args[1])==-1) {
 						write(STDERR_FILENO, error_message, strlen(error_message));
 					}
@@ -92,7 +151,8 @@ int main(int argc, char **argv) {
 				continue;
 			}
 
-			if (strcmp(args[0], "path")==0) { /* Built-in 'path' command: Overwrites shell search path */
+			/* Built-in 'path' command: Overwrites shell search path */
+			if (strcmp(args[0], "path")==0) { 
 				i = 1;
 				path = NULL;
 
@@ -122,25 +182,26 @@ int main(int argc, char **argv) {
 				case 0:
 					i = 0;
 					temp_path = path;
-					if (strcmp(path, "/bin")!=0){
+					if (strcmp(path, DEFAULT_PATH)!=0){ /* Check if path has been changed */
 						while ((paths[i] = strtok(temp_path, " ")) != NULL) {
 							i++;
 							temp_path = NULL;
 						}
 						i = 0;
+						/* Combine path and args[0] for execv */
 						while (paths[i] != NULL) {
-							if((new_str = malloc(strlen(paths[i])+strlen(args[0])+2)) != NULL){
-							    new_str[0] = '\0';
+							if((path_args = malloc(strlen(paths[i])+strlen(args[0])+2)) != NULL){
+							    path_args[0] = '\0';
 							    
-							    strcat(new_str, paths[i]);
-							    strcat(new_str, "/");
-							    strcat(new_str, args[0]);
+							    strcat(path_args, paths[i]);
+							    strcat(path_args, "/");
+							    strcat(path_args, args[0]);
 
-							    if (access(new_str, X_OK)==0) { /* Check if path can access file */
-									execv(new_str, args);
+							    if (access(path_args, X_OK)==0) { /* Check if path can access file */
+									execv(path_args, args);
 									perror("execv");
 									free(line);
-									free(new_str);
+									free(path_args);
 									exit(1);
 								}
 							    i++;
@@ -150,23 +211,24 @@ int main(int argc, char **argv) {
 							}
 						}
 						write(STDERR_FILENO, error_message, strlen(error_message));
-						exit(1);
+						continue;
 
-					} else {
-						if((new_str = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
-						    new_str[0] = '\0';
-						    strcat(new_str,path);
-						    strcat(new_str,"/");
-						    strcat(new_str,args[0]);
+					} else {  /* Default path --> */
+						/* Combine path and args[0] for execv */
+						if((path_args = malloc(strlen(path)+strlen(args[0])+2)) != NULL){
+						    path_args[0] = '\0';
+						    strcat(path_args, path);
+						    strcat(path_args, "/");
+						    strcat(path_args, args[0]);
 						} else {
 						   	perror("Malloc");
 						    exit(1);
 						}
-							execv(new_str, args);
-							perror("execv");
-							free(line);
-							free(new_str);
-							exit(1);
+						execv(path_args, args);
+						perror("execv");
+						free(line);/* Combine path and args for execv */
+						free(path_args);
+						exit(1);
 					}
 					
 				default:
