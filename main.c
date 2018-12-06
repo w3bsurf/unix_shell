@@ -19,15 +19,15 @@ void built_in_cd(int num_of_args, char *args[]);
 
 void built_in_path(char **path, char **args);
 
-void run_command(char *path, char *paths[], char path_args[], char **args, int background);
+void run_command(char *path, char *paths[], char path_args[], char **args);
+
+void executor(char **arg, int *saved_stdout);
 
 int main(int argc, char **argv) {
-	char *cmd, *line;
-	char *paths[MAXNUM], *args[MAXNUM], *args2[MAXNUM], *lines[MAXNUM];
-	char *path = "/bin";
+	char *line;
 	size_t buffer_size = MAXLEN;
-	int background, i, num_of_args;
-	int saved_stdout = dup(1);;
+	int saved_stdout = dup(1);
+	FILE* file;
 
 	line = (char *)malloc(buffer_size * sizeof(char));
     if( line == NULL) {
@@ -35,82 +35,35 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-	if (argc == 1) { /* Run in interactive mode if invoked with no arguments */
+	if ((argc == 1) | (argc == 2)) { /* Run in interactive mode if invoked with no arguments */
 		while (1) {
-			background = 0;
-			char * path_args = NULL;
-
 			/* Restore stdout */
 			// Source: https://stackoverflow.com/questions/11042218/c-restore-stdout-to-terminal
 			dup2(saved_stdout, 1);
 			close(saved_stdout);
-						
-			/* Print the prompt */
-			printf("wish> ");
 			
-			/* Read the users command */
-			getline(&line, &buffer_size, stdin); 
-			if (line == NULL) {
-				printf("\nlogout\n");
-				exit(0);
-			}
-
-			line[strlen(line) - 1] = '\0';
+			if (argc == 1) {
+				/* Print the prompt */
+				printf("wish> ");
 			
-			if (strlen(line) == 0) {
+				/* Read the users command */
+				getline(&line, &buffer_size, stdin);
+				executor(&line, &saved_stdout);
 				continue;
-			}
-			
-			/* Start to background? */
-			/*if (line[strlen(line)-1] == '&') {
-				line[strlen(line)-1]=0;
-				background = 1;
-			}*/
-			
-			if (strpbrk(line, "&")!=0) {
-				i = 0;
-				cmd = line;
-				while ((lines[i] = strsep(&cmd, "&")) != NULL) {
-					printf("Line %d: %s\n", i, lines[i]);
-					i++;
-				}
-				for (int x = 0; x<i; x++) {
-					if (parse_line(lines[x], args, args2, &num_of_args, &saved_stdout)==1) {
-						continue;
-					}
-					/* Run command with given arguments */
-					run_command(path, paths, path_args, args, background);
-					
-					/* Restore stdout */
-					dup2(saved_stdout, 1);
-					close(saved_stdout);
-					continue;
-				}
-			} else {
-				if (parse_line(line, args, args2, &num_of_args, &saved_stdout)==1) {
-					continue;
-				}
-				if (strcmp(args[0], "exit")==0) { 
-					if (built_in_exit(num_of_args, &line, &path, &path_args)==1) {
-						continue;
-					}
-				} else if (strcmp(args[0], "cd")==0) {
-					built_in_cd(num_of_args, args);
-					continue;
-				} else if (strcmp(args[0], "path")==0) {
-					built_in_path(&path, args);
-					printf("%s\n", path);
-					continue;
-				} else {
-					/* Run command with given arguments */
-					run_command(path, paths, path_args, args, background);
-					continue;
-				}				
-			}			
-		}
 
-	} else if (argc == 2) { /* Run in batch mode if invoked with one argument */
-		printf("Batch mode\n");
+			} else {
+				if ((file = fopen(argv[1], "r")) == NULL) {
+					write(STDERR_FILENO, error_message, strlen(error_message));
+					exit(1);
+				}
+				while ((getline(&line, &buffer_size, file)!=-1))  {
+					executor(&line, &saved_stdout);
+				}
+				free(line);
+				fclose(file);
+				exit(0);
+			}							
+		}
 	} else {  /* Terminate program if shell invoked with more than one argument */
 		printf("Shell can only be invoked with no arguments or a single argument\n");
 		exit(1);
@@ -227,9 +180,9 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 	return 0;
 }
 
-void run_command(char *path, char *paths[], char path_args[], char **args, int background) {
+void run_command(char *path, char *paths[], char path_args[], char **args) {
 	char *temp_path;
-	int pid, i;
+	int pid, i, status;
 	switch (pid = fork()) {
 		case -1:
 			/* error */
@@ -287,13 +240,70 @@ void run_command(char *path, char *paths[], char path_args[], char **args, int b
 			break;
 		default:
 			/* parent (shell) */
-			if (!background) {
-				alarm(0);
-				//waitpid(pid, NULL, 0);
-				while (wait(NULL)!=pid)
-					printf("Some other child process exited\n");
-			}
+			if (wait(&status) == -1) {
+	            perror("wait");
+	            exit(1);
+	        }
 			break;
 	}
 	return;
+}
+
+void executor(char **arg, int *saved_stdout) {
+	char *paths[MAXNUM], *args[MAXNUM], *args2[MAXNUM], *lines[MAXNUM];
+	char *cmd, *path = "/bin";
+	char *path_args = NULL;
+	int i, num_of_args;
+	char *line = *arg;
+
+	if (line == NULL) {
+		printf("\nlogout\n");
+		exit(0);
+	}
+
+	line[strlen(line) - 1] = '\0';
+	if (strlen(line) == 0) {
+		return;
+	}
+
+	if (strpbrk(line, "&")!=0) {
+		i = 0;
+		cmd = line;
+		while ((lines[i] = strsep(&cmd, "&")) != NULL) {
+			printf("Line %d: %s\n", i, lines[i]);
+			i++;
+		}
+		for (int x = 0; x<i; x++) {
+			if (parse_line(lines[x], args, args2, &num_of_args, saved_stdout)==1) {
+				return;
+			}
+			/* Run command with given arguments */
+			run_command(path, paths, path_args, args);
+
+			/* Restore stdout */
+			dup2(*saved_stdout, 1);
+			close(*saved_stdout);
+			return;
+		}
+	} else {
+		if (parse_line(line, args, args2, &num_of_args, saved_stdout)==1) {
+			return;
+		}
+		if (strcmp(args[0], "exit")==0) { 
+			if (built_in_exit(num_of_args, &line, &path, &path_args)==1) {
+				return;
+			}
+		} else if (strcmp(args[0], "cd")==0) {
+			built_in_cd(num_of_args, args);
+			return;
+		} else if (strcmp(args[0], "path")==0) {
+			built_in_path(&path, args);
+			printf("%s\n", path);
+			return;
+		} else {
+			/* Run command with given arguments */
+			run_command(path, paths, path_args, args);
+			return;
+		}				
+	}
 }
