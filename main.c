@@ -11,6 +11,7 @@
 
 char error_message[30] = "An error has occurred\n";
 
+// Declare functions
 int parse_line(char *line, char **args, char **args2, int *num_of_args, int *saved_stdout);
 
 int built_in_exit(int num_of_args, char **line, char **path, char **path_args);
@@ -35,27 +36,29 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-	if ((argc == 1) | (argc == 2)) { /* Run in interactive mode if invoked with no arguments */
+	if ((argc == 1) | (argc == 2)) {
 		while (1) {
 			/* Restore stdout */
 			// Source: https://stackoverflow.com/questions/11042218/c-restore-stdout-to-terminal
 			dup2(saved_stdout, 1);
 			close(saved_stdout);
 			
-			if (argc == 1) {
+			if (argc == 1) { /* Run in interactive mode if no argument given */
 				/* Print the prompt */
 				printf("wish> ");
 			
 				/* Read the users command */
 				getline(&line, &buffer_size, stdin);
+				/*  */
 				executor(&line, &saved_stdout);
 				continue;
 
-			} else {
+			} else {  /* Run in batch mode if argument given */
 				if ((file = fopen(argv[1], "r")) == NULL) {
 					write(STDERR_FILENO, error_message, strlen(error_message));
 					exit(1);
 				}
+				/* Read batch file for commands */
 				while ((getline(&line, &buffer_size, file)!=-1))  {
 					executor(&line, &saved_stdout);
 				}
@@ -120,6 +123,7 @@ void built_in_path(char **path, char **args) {
 	return;
 }
 
+/* Parses given line and redirects ouput to file if needed */
 int parse_line(char *line, char **args, char **args2, int *num_of_args, int *saved_stdout) {
 	int i, fd;
 	char *cmd, *output[MAXNUM];
@@ -180,6 +184,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 	return 0;
 }
 
+/* Forks and runs command in given search path with execv */
 void run_command(char *path, char *paths[], char path_args[], char **args) {
 	char *temp_path;
 	int pid, i, status;
@@ -249,6 +254,7 @@ void run_command(char *path, char *paths[], char path_args[], char **args) {
 	return;
 }
 
+/* Checks conditions and executes code and calls functions approriately */
 void executor(char **arg, int *saved_stdout) {
 	char *paths[MAXNUM], *args[MAXNUM], *args2[MAXNUM], *lines[MAXNUM];
 	char *cmd, *path = "/bin";
@@ -262,33 +268,51 @@ void executor(char **arg, int *saved_stdout) {
 	}
 
 	line[strlen(line) - 1] = '\0';
+
 	if (strlen(line) == 0) {
 		return;
 	}
 
-	if (strpbrk(line, "&")!=0) {
+	if (strpbrk(line, "&")!=0) { /* Run multiple commands in parallel if "&" in input*/
 		i = 0;
 		cmd = line;
-		while ((lines[i] = strsep(&cmd, "&")) != NULL) {
+		/* Split input into separate commands */
+		while ((lines[i] = strsep(&cmd, "&")) != NULL) { 
 			printf("Line %d: %s\n", i, lines[i]);
 			i++;
 		}
+		/* Parse and run each separate command */
 		for (int x = 0; x<i; x++) {
 			if (parse_line(lines[x], args, args2, &num_of_args, saved_stdout)==1) {
 				return;
 			}
-			/* Run command with given arguments */
-			run_command(path, paths, path_args, args);
+			/* Check commands for built-ins */
+			if (strcmp(args[0], "exit")==0) { 
+				if (built_in_exit(num_of_args, &line, &path, &path_args)==1) {
+					return;
+				}
+			} else if (strcmp(args[0], "cd")==0) {
+				built_in_cd(num_of_args, args);
+				return;
+			} else if (strcmp(args[0], "path")==0) {
+				built_in_path(&path, args);
+				printf("%s\n", path);
+				return;
+			} else { 	/* If no built-in command given, run with execv */
+				/* Run command with given arguments */
+				run_command(path, paths, path_args, args);
 
-			/* Restore stdout */
-			dup2(*saved_stdout, 1);
-			close(*saved_stdout);
-			return;
+				/* Restore stdout */
+				dup2(*saved_stdout, 1);
+				close(*saved_stdout);
+			}	
 		}
-	} else {
+		return;
+	} else { /* Run single command if no "&" in input */
 		if (parse_line(line, args, args2, &num_of_args, saved_stdout)==1) {
 			return;
 		}
+		/* Check commands for built-ins */
 		if (strcmp(args[0], "exit")==0) { 
 			if (built_in_exit(num_of_args, &line, &path, &path_args)==1) {
 				return;
@@ -300,7 +324,7 @@ void executor(char **arg, int *saved_stdout) {
 			built_in_path(&path, args);
 			printf("%s\n", path);
 			return;
-		} else {
+		} else { 	/* If no built-in command given, run with execv */
 			/* Run command with given arguments */
 			run_command(path, paths, path_args, args);
 			return;
