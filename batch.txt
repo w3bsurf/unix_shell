@@ -1,0 +1,5 @@
+ls -l
+
+ls
+
+ls -la /tmp

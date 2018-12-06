@@ -10,6 +10,12 @@
 #define MAXLEN 160
 
 char error_message[30] = "An error has occurred\n";
+char file_error[30] = "Error when opening file\n";
+char arg_error[30] = "Bad arguments\n";
+char argc_error[30] = "Invalid num of arguments\n";
+char cd_error[20] = "cd failed\n";
+char path_error[30] = "Invalid path\n";
+
 
 // Declare functions
 int parse_line(char *line, char **args, char **args2, int *num_of_args, int *saved_stdout);
@@ -55,7 +61,7 @@ int main(int argc, char **argv) {
 
 			} else {  /* Run in batch mode if argument given */
 				if ((file = fopen(argv[1], "r")) == NULL) {
-					write(STDERR_FILENO, error_message, strlen(error_message));
+					write(STDERR_FILENO, file_error, strlen(file_error));
 					exit(1);
 				}
 				/* Read batch file for commands */
@@ -69,7 +75,7 @@ int main(int argc, char **argv) {
 			}							
 		}
 	} else {  /* Terminate program if shell invoked with more than one argument */
-		printf("Shell can only be invoked with no arguments or a single argument\n");
+		write(STDERR_FILENO, argc_error, strlen(argc_error));
 		exit(1);
 	}
 	
@@ -78,8 +84,8 @@ int main(int argc, char **argv) {
 
 /* Built-in 'exit' command */
 int built_in_exit(int num_of_args, char **line, char **path, char **path_args) {
-	if (num_of_args > 1) {
-		write(STDERR_FILENO, error_message, strlen(error_message));
+	if (num_of_args > 1) { /* Check input for correct num of args */
+		write(STDERR_FILENO, argc_error, strlen(argc_error));
 		return 1;
 	} else {
 		free(*line);
@@ -94,10 +100,10 @@ int built_in_exit(int num_of_args, char **line, char **path, char **path_args) {
 void built_in_cd(int num_of_args, char *args[]) {
 	if (num_of_args == 2) { 	/* Check input for correct num of args */
 		if (chdir(args[1])==-1) {
-			write(STDERR_FILENO, error_message, strlen(error_message));
+			write(STDERR_FILENO, cd_error, strlen(cd_error));
 		}
 	} else {
-		write(STDERR_FILENO, error_message, strlen(error_message));
+		write(STDERR_FILENO, argc_error, strlen(argc_error));
 	}
 	return;
 }
@@ -137,7 +143,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 			i++;
 		}
 		if (i>2) { 	/* If more than 1 ">" --> error */
-			write(STDERR_FILENO, error_message, strlen(error_message));
+			write(STDERR_FILENO, arg_error, strlen(arg_error));
 			return 1;
 		} else {
 			i = 0;
@@ -147,7 +153,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 				args2[1] = NULL;
 			}
 			if (i!=1) { /* If more or less than 1 output file --> error */
-				write(STDERR_FILENO, error_message, strlen(error_message));
+				write(STDERR_FILENO, arg_error, strlen(arg_error));
 				return 1;
 			} else {
 				i = 0;
@@ -220,7 +226,7 @@ void run_command(char *path, char *paths[], char path_args[], char **args) {
 					    exit(1);
 					}
 				}
-				write(STDERR_FILENO, error_message, strlen(error_message));
+				write(STDERR_FILENO, path_error, strlen(path_error));
 				return;
 
 			} else {  /* Default path --> */
@@ -231,7 +237,7 @@ void run_command(char *path, char *paths[], char path_args[], char **args) {
 				    strcat(path_args, "/");
 				    strcat(path_args, args[0]);
 				} else {
-				   	perror("Malloc");
+				   	perror("malloc");
 				    exit(1);
 				}
 				if (execv(path_args, args)==-1) {
