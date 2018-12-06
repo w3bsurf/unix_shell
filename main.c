@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-	if ((argc == 1) | (argc == 2)) {
+	if (argc == 1 || argc == 2) {
 		while (1) {
 			/* Restore stdout */
 			// Source: https://stackoverflow.com/questions/11042218/c-restore-stdout-to-terminal
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 			
 				/* Read the users command */
 				getline(&line, &buffer_size, stdin);
-				/*  */
+				/* Execute command */
 				executor(&line, &saved_stdout);
 				continue;
 
@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
 				}
 				/* Read batch file for commands */
 				while ((getline(&line, &buffer_size, file)!=-1))  {
+					/* Execute command */
 					executor(&line, &saved_stdout);
 				}
 				free(line);
@@ -130,7 +131,6 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 
 	i = 0;
 	cmd = line;
-
 	if (strpbrk(cmd, ">")!=0) { 	/*If ">" in input, redirect output to file */ 
 		/* Split input in two: cmd and output file */
 		while ((args2[i] = strsep(&cmd, ">")) != NULL) {
@@ -142,8 +142,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 		} else {
 			i = 0;
 			/* Check output side of ">" for num of files */
-			while ((output[i] = strtok(args2[1], " ")) != NULL) {
-				printf("O %d: %s\n", i, output[i]);
+			while ((output[i] = strtok(args2[1], " \t")) != NULL) {
 				i++;
 				args2[1] = NULL;
 			}
@@ -153,8 +152,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 			} else {
 				i = 0;
 				/* Split the command line */
-				while ((args[i] = strtok(args2[0], " ")) != NULL) {
-					printf("arg %d: %s\n", i, args[i]);
+				while ((args[i] = strtok(args2[0], " \t")) != NULL) {
 					i++;
 					args2[0] = NULL;
 					*num_of_args = i;
@@ -174,8 +172,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 		}
 	} else {
 		/* Split the command line */
-		while ((args[i] = strtok(cmd, " ")) != NULL) {
-			printf("arg %d: %s\n", i, args[i]);
+		while ((args[i] = strtok(cmd, " \t")) != NULL) {
 			i++;
 			cmd = NULL;
 			*num_of_args = i;
@@ -261,30 +258,33 @@ void executor(char **arg, int *saved_stdout) {
 	char *path_args = NULL;
 	int i, num_of_args;
 	char *line = *arg;
-
+	
 	if (line == NULL) {
 		printf("\nlogout\n");
 		exit(0);
 	}
 
-	line[strlen(line) - 1] = '\0';
-
 	if (strlen(line) == 0) {
 		return;
 	}
+
+	line[strlen(line) - 1] = '\0';
 
 	if (strpbrk(line, "&")!=0) { /* Run multiple commands in parallel if "&" in input*/
 		i = 0;
 		cmd = line;
 		/* Split input into separate commands */
 		while ((lines[i] = strsep(&cmd, "&")) != NULL) { 
-			printf("Line %d: %s\n", i, lines[i]);
 			i++;
 		}
 		/* Parse and run each separate command */
 		for (int x = 0; x<i; x++) {
 			if (parse_line(lines[x], args, args2, &num_of_args, saved_stdout)==1) {
 				return;
+			}
+			/* Skip command if NULL */
+			if (args[0]==NULL) {
+				continue;
 			}
 			/* Check commands for built-ins */
 			if (strcmp(args[0], "exit")==0) { 
@@ -296,7 +296,6 @@ void executor(char **arg, int *saved_stdout) {
 				return;
 			} else if (strcmp(args[0], "path")==0) {
 				built_in_path(&path, args);
-				printf("%s\n", path);
 				return;
 			} else { 	/* If no built-in command given, run with execv */
 				/* Run command with given arguments */
@@ -312,6 +311,10 @@ void executor(char **arg, int *saved_stdout) {
 		if (parse_line(line, args, args2, &num_of_args, saved_stdout)==1) {
 			return;
 		}
+		/* Skip command if NULL */
+		if (args[0]==NULL) {
+			return;
+		}
 		/* Check commands for built-ins */
 		if (strcmp(args[0], "exit")==0) { 
 			if (built_in_exit(num_of_args, &line, &path, &path_args)==1) {
@@ -322,7 +325,6 @@ void executor(char **arg, int *saved_stdout) {
 			return;
 		} else if (strcmp(args[0], "path")==0) {
 			built_in_path(&path, args);
-			printf("%s\n", path);
 			return;
 		} else { 	/* If no built-in command given, run with execv */
 			/* Run command with given arguments */
