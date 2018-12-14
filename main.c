@@ -94,7 +94,6 @@ int built_in_exit(int num_of_args, char **line, char **path, char **path_args) {
 	} else {
 		free(*line);
 		free(*path_args);
-		free(*path);
 		exit(0);
 	}
 	return 0;
