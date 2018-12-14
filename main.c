@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/file.h>
+#include <errno.h>
 
 #define LOGOUT 40
 #define MAXNUM 40
@@ -37,8 +38,8 @@ int main(int argc, char **argv) {
 	FILE* file;
 
 	line = (char *)malloc(buffer_size * sizeof(char));
-    if( line == NULL) {
-        perror("Unable to allocate buffer");
+    if (line == NULL) {
+        write(STDERR_FILENO, error_message, strlen(error_message));
         exit(1);
     }
 
@@ -65,7 +66,10 @@ int main(int argc, char **argv) {
 					exit(1);
 				}
 				/* Read batch file for commands */
-				while ((getline(&line, &buffer_size, file)!=-1))  {
+				while (getline(&line, &buffer_size, file)!=-1) {
+					if(errno!=0) {
+						exit(1);
+					}
 					/* Execute command */
 					executor(&line, &saved_stdout);
 				}
@@ -166,7 +170,7 @@ int parse_line(char *line, char **args, char **args2, int *num_of_args, int *sav
 				/* Open output file */
 				fd = open(output[0], O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	            if (fd == -1) {
-	                perror("Unable to open file");
+	                write(STDERR_FILENO, file_error, strlen(file_error));
 	                return 1;
 	            }
 	            /* Save current stdout for use later */
@@ -194,7 +198,7 @@ void run_command(char *path, char *paths[], char path_args[], char **args) {
 	switch (pid = fork()) {
 		case -1:
 			/* error */
-			perror("fork");
+			write(STDERR_FILENO, error_message, strlen(error_message));
 			exit(1);
 		case 0:
 			i = 0;
@@ -217,12 +221,12 @@ void run_command(char *path, char *paths[], char path_args[], char **args) {
 					    if (access(path_args, X_OK)==0) { /* Check if path can access file */
 							if (execv(path_args, args)==-1) {
 								perror("execv");
-								exit(1);
+								return;
 							}
 						}
 					    i++;
 					} else {
-					   	perror("Malloc");
+					   	write(STDERR_FILENO, error_message, strlen(error_message));
 					    exit(1);
 					}
 				}
@@ -237,19 +241,19 @@ void run_command(char *path, char *paths[], char path_args[], char **args) {
 				    strcat(path_args, "/");
 				    strcat(path_args, args[0]);
 				} else {
-				   	perror("malloc");
+				   	write(STDERR_FILENO, error_message, strlen(error_message));
 				    exit(1);
 				}
 				if (execv(path_args, args)==-1) {
 					perror("execv");
-					exit(1);
+					return;
 				}
 			}
 			break;
 		default:
 			/* parent (shell) */
 			if (wait(&status) == -1) {
-	            perror("wait");
+	            write(STDERR_FILENO, error_message, strlen(error_message));
 	            exit(1);
 	        }
 			break;
